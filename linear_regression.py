@@ -57,7 +57,7 @@ for key in skeys:
     X_.append(X[key])
 
 y = numpy.array(y_)[:]
-X = numpy.array(X_)[:, 1:]
+X = numpy.array(X_)[:, 1:41]
 #%%
 import sklearn.decomposition
 
@@ -120,21 +120,300 @@ fit2 = m.sampling(data = {
 
 print fit2
 #%%
+R = 40
+means = fit2.extract()['w'].mean(axis = 0)[:R]
+stds = fit2.extract()['w'].std(axis = 0)[:R]
+mb = fit2.extract()['b'].mean()
+sb = fit2.extract()['b'].std()
 
-pca = sklearn.decomposition.PCA()
+means = numpy.concatenate(([mb], means))
+stds = numpy.concatenate(([sb], stds))
+
+plt.plot(ecis[:R], 'g*')
+plt.plot(means, 'b*')
+plt.plot(means - 2 * stds, 'r--')
+plt.plot(means + 2 * stds, 'r--')
+plt.gcf().set_size_inches((12, 12))
+plt.plot()
+#%%
+import json
+
+with open('eci.json') as f:
+    data = json.load(f)
+#%%
+ce = data['cluster_functions']
+ecis = []
+for c in ce:
+    if 'eci' in c:
+        ecis.append(c['eci'])
+    else:
+        ecis.append(0.0)
+#%%
+
+pca = sklearn.decomposition.PCA(40)
 pca.fit(X)
 
 X2 = pca.transform(X)
 
 # Run the fit!
-fit = m.sampling(data = {
+fit = m.vb(data = {
     "N" : X2.shape[0],
     "L" : X2.shape[1],
     "X" : X2[:, :],
     "y" : y
-})
+})#, algorithm = 'meanfield')
 
 print fit
+#%%
+out = numpy.loadtxt('/tmp/tmpZ03QGO/output.csv', delimiter = ',', skiprows = 1)
+#%%
+def skip_comments(f):
+    for line in f:
+        if line[0] == '#'
+            continue
+        else:
+            yield line
+#%%
+out = numpy.genfromtxt('/tmp/tmpZ03QGO/output.csv', delimiter = ',', comments = '#', names = True, skip_header = 15)
+#%%
+
+with open('/tmp/tmpZ03QGO/output.csv') as f:
+    found_header = False
+    header_length = 0
+    for i, line in enumerate(f):
+        line = line.strip()
+
+        if found_header == False and line[0] != '#':
+            labels = line.split(',')
+            found_header = True
+        elif found_header == True and line[0] != '#':
+            header_length = i
+            break
+
+samples = numpy.loadtxt('/tmp/tmpZ03QGO/output.csv', skiprows = header_length, delimiter = ',')
+
+import collections
+
+counter = collections.Counter()
+
+for i, label in enumerate(labels):
+    tokens = label.split('.')
+
+    if len(tokens) == 1:
+        counter[label] += 1
+    else:
+        tlabel = "".join(label.split('.')[:-1])
+        counter[tlabel] += 1
+
+output = {}
+
+for tlabel, count in counter.iteritems():
+    idxs = numpy.where([label.startswith(tlabel) for label in labels])
+    if count == 1:
+        output[tlabel] = samples[:, idxs].reshape(-1)
+    else:
+        output[tlabel] = samples[:, idxs].reshape(-1, count)
+
+#%%
+    found_header = False
+
+    samples = []
+    for line in f:
+        if line[0] == '#':
+            continue
+
+        if found_header == False:
+            labels = line.strip().split(',')
+            found_header = True
+
+        try:
+            samples.append([float(v) for v in line.strip().split(',')])
+        except Exception as e:
+            print e
+            print line
+
+samples = numpy.array(samples)
+
+#%%
+R = 24
+means = samples[:, numpy.where([l[0] == 'w' for l in labels])].dot(pca.components_).mean(axis = 0)[:R].flatten()
+stds = samples[:, numpy.where([l[0] == 'w' for l in labels])].dot(pca.components_).std(axis = 0)[:R].flatten()
+mb = samples[:, numpy.where([l[0] == 'b' for l in labels])].mean()
+sb = samples[:, numpy.where([l[0] == 'b' for l in labels])].std()
+
+means = numpy.concatenate(([mb], means))
+stds = numpy.concatenate(([sb], stds))
+
+plt.plot(means, 'b*')
+plt.plot(ecis[:R], 'go')
+plt.plot(means - 2 * stds, 'r--')
+plt.plot(means + 2 * stds, 'r--')
+plt.gcf().set_size_inches((12, 12))
+plt.plot()
+#%%
+means = fit.extract()['w'].dot(pca.components_).mean(axis = 0)[:R]
+stds = fit.extract()['w'].dot(pca.components_).std(axis = 0)[:R]
+mb = fit.extract()['b'].mean()
+sb = fit.extract()['b'].std()
+
+means = numpy.concatenate(([mb], means))
+stds = numpy.concatenate(([sb], stds))
+
+plt.plot(means, 'b*')
+plt.plot(ecis[:R], 'go')
+plt.plot(means - 2 * stds, 'r--')
+plt.plot(means + 2 * stds, 'r--')
+plt.gcf().set_size_inches((12, 12))
+plt.plot()
+#%%
+X_ = numpy.array(X_)
+
+results = {}
+
+for f in range(10, X_.shape[1] - 1):
+    X = X_[:, 1:f + 1]
+    for d in range(10, f + 1):
+        pca = sklearn.decomposition.PCA(d)
+        pca.fit(X)
+
+        X2 = pca.transform(X)
+
+        lr = sklearn.linear_model.LinearRegression()
+
+        lr.fit(X2, y)
+
+        ecs = numpy.concatenate(([lr.intercept_], lr.coef_.dot(pca.components_)))
+
+        results[(f, d)] = (ecs, numpy.std(lr.predict(X2) - y), lr.score(X2, y))
+
+        #print results[(f, d)]
+
+    print f
+#%%
+plt.plot(results[(127, 109)][0], 'r')
+plt.plot(ecis, 'g--')
+
+#%%
+import scipy.spatial
+ch = scipy.spatial.ConvexHull(zip(X[:, 0], y))
+
+Xch, ych = X[ch.vertices, 0], y[ch.vertices]
+
+midxs = numpy.argsort(Xch)
+
+mXch = Xch[midxs]
+mych = ych[midxs]
+mvertices = ch.vertices[midxs]
+
+yp = X.dot(means[1:]) + means[0]
+ch = scipy.spatial.ConvexHull(zip(X[:, 0], yp))
+
+Xch, ych = X[ch.vertices, 0], yp[ch.vertices]
+
+#plt.plot(X[:, 0], yt, '*r')
+#plt.plot(X[:, 0], y, '*b')
+#plt.plot(Xch, ych)
+
+idxs = numpy.argsort(Xch)
+
+Xch = Xch[idxs]
+ych = ych[idxs]
+vertices = ch.vertices[idxs]
+
+pych = X[mvertices, :].dot(means[1:]) + means[0]
+errors = []
+
+loss = 0.0
+dlossdecis = numpy.zeros(means.shape[0] - 1)
+for i, (xt, yt) in enumerate(zip(X[:, 0], yp)):
+    j = bisect.bisect_left(mXch, xt)
+
+    if j == 0:
+        diff = yt - pych[j]
+    else:
+        dx = mXch[j] - mXch[j - 1]
+        alpha = (xt - mXch[j - 1]) / dx
+        diff = yt - (pych[j - 1] * (1 - alpha) + pych[j] * alpha)
+
+    if diff < 0.0:
+        loss += diff
+        print i, dlossdecis
+        dlossdecis += X[i, :]
+
+plt.plot(mXch, mych, 'g')
+
+others = numpy.random.randint(0, len(X), size = 5)
+
+#%%
+import scipy.spatial
+import bisect
+
+ch = scipy.spatial.ConvexHull(zip(X[:, 0], y))
+
+Xch, ych = X[ch.vertices, 0], y[ch.vertices]
+
+midxs = numpy.argsort(Xch)
+
+mXch = Xch[midxs]
+mych = ych[midxs]
+mvertices = ch.vertices[midxs]
+
+def UgradU(ecis):
+    pych = X[mvertices, :].dot(ecis[1:]) + means[0]
+
+    yp = X.dot(ecis[1:]) + ecis[0]
+    errors = []
+
+    loss = 0.0
+    dlossdecis = numpy.zeros(means.shape[0] - 1)
+    for i, (xt, yt) in enumerate(zip(X[:, 0], yp)):
+        j = bisect.bisect_left(mXch, xt)
+
+        if j == 0:
+            diff = yt - pych[j]
+        else:
+            dx = mXch[j] - mXch[j - 1]
+            alpha = (xt - mXch[j - 1]) / dx
+            diff = yt - (pych[j - 1] * (1 - alpha) + pych[j] * alpha)
+
+        if diff < 0.0:
+            loss += diff
+            dlossdecis += X[i, :]
+
+    return loss, dlossdecis
+
+plt.plot(mXch, mych, 'g')
+
+others = numpy.random.randint(0, len(X), size = 5)
+#%%
+plt.plot(X[ch.vertices, 0], y[ch.vertices])
+plt.scatter(X[:, 0], y)
+plt.show()
+#%%
+works = 0.1 * numpy.ones((189 - 10, 189 - 10))
+
+for (f, d), (ecs, std, score) in results.iteritems():
+    errors = []
+    for i in range(len(ecs)):
+        errors.append(ecis[i] - ecs[i])
+
+    if numpy.any(numpy.abs(ecs) > 0.5):
+        works[f - 10, d - 10] = 0.1
+    else:
+        works[f - 10, d - 10] = std#numpy.std(errors)#score
+
+idx = numpy.unravel_index(numpy.argmin(works), works.shape)
+print numpy.array(idx) + 10, works[idx]
+
+plt.imshow(numpy.log(works), interpolation = 'NONE', cmap = plt.cm.viridis)
+plt.colorbar()
+#        1/0
+#    y = numpy.array(y_)[:]
+#    X = numpy.array()
+#%%
+ar = sklearn.linear_model.ARDRegression()
+
+ar.fit(X_, y)
 #%%
 import sklearn.linear_model
 
