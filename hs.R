@@ -16,11 +16,13 @@ fit = stan_glm(paste(names(df)[-190], collapse = " + ") %>% paste0("y ~ ", .),
                chains = 4, cores = 4,
                control = list(max_treedepth = 8))
 
-launch_shinystan(fit3)
-
-ps = extract(fit, inc_warmup = TRUE, permuted = FALSE)
-
 mcmc_intervals(fit %>% as.matrix)
+
+posterior_interval(fit) %>% as.tibble %>%
+  mutate(rn = row_number()) %>%
+  rename(low = '5%', high = '95%') %>%
+  ggplot(aes(rn)) +
+  geom_ribbon(aes(ymin = low, ymax = high))
 
 # fit2 = brm(paste(names(df)[-190], collapse = " + ") %>% paste0("y ~ ", .),
 #            data = df,
