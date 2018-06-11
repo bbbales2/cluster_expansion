@@ -58,7 +58,7 @@ for key in skeys:
     X_.append(X[key])
 
 y = numpy.array(y_)[:]
-X = numpy.array(X_)[:, 1:41]
+X = numpy.array(X_)[:, 1:]
 
 
 with open('eci.json') as f:
@@ -143,17 +143,22 @@ Xch, ych = X[ch.vertices, 0], y[ch.vertices]
 
 midxs = numpy.argsort(Xch)
 
-mXch = Xch[midxs]
-mych = ych[midxs]
+#mXch = Xch[midxs]
+#mych = ych[midxs]
 mvertices = ch.vertices[midxs]
 
 def UgradU(ecis):
-    pych = X[mvertices, :].dot(ecis[1:]) + ecis[0]
+    pych = X[mvertices, :len(ecis) - 1].dot(ecis[1:]) + ecis[0]
+    mXch = X[mvertices, 0]
 
-    yp = X.dot(ecis[1:]) + ecis[0]
+    yp = X[:, :len(ecis) - 1].dot(ecis[1:]) + ecis[0]
+
+    #plt.plot(mXch, pych)
+    #plt.plot(X[:, 0], yp, 'r*')
+    #plt.show()
 
     loss = 0.0
-    dlossdecis = numpy.zeros(means.shape[0])
+    dlossdecis = numpy.zeros(len(ecis))
     for i, (xt, yt) in enumerate(zip(X[:, 0], yp)):
         j = bisect.bisect_left(mXch, xt)
 
@@ -162,7 +167,7 @@ def UgradU(ecis):
 
             if diff < 0.0:
                 loss += diff
-                dlossdecis[1:] += X[i, :] - X[mvertices[j], :]
+                dlossdecis[1:] += X[i, :len(ecis) - 1] - X[mvertices[j], :len(ecis) - 1]
         else:
             dx = mXch[j] - mXch[j - 1]
             alpha = (xt - mXch[j - 1]) / dx
@@ -170,12 +175,53 @@ def UgradU(ecis):
 
             if diff < 0.0:
                 loss += diff
-                dlossdecis[1:] += X[i, :] - (1 - alpha) * X[mvertices[j - 1], :] - alpha * X[mvertices[j], :]
+                dlossdecis[1:] += X[i, :len(ecis) - 1] - (1 - alpha) * X[mvertices[j - 1], :len(ecis) - 1] - alpha * X[mvertices[j], :len(ecis) - 1]
 
     return loss, dlossdecis
 
 l, dl = UgradU(means)
 
+#%%
+X = numpy.array(X)
+
+results = {}
+
+for f in range(10, X.shape[1] - 1):
+    Xt = X[:, 0:f + 1]
+    for d in range(10, f + 1):
+        pca = sklearn.decomposition.PCA(d)
+        pca.fit(Xt)
+
+        X2 = pca.transform(Xt)
+
+        lr = sklearn.linear_model.LinearRegression()
+
+        lr.fit(X2, y)
+
+        ecs = numpy.concatenate(([lr.intercept_], lr.coef_.dot(pca.components_)))
+
+        results[(f, d)] = (ecs, numpy.std(lr.predict(X2) - y), lr.score(X2, y), UgradU(ecs)[0])
+
+    print f
+
+#%%
+works = 0.1 * numpy.ones((189 - 10, 189 - 10))
+
+for (f, d), (ecs, std, score, err) in results.iteritems():
+    errors = []
+    for i in range(len(ecs)):
+        errors.append(ecis[i] - ecs[i])
+
+    if numpy.any(numpy.abs(ecs) > 0.5):
+        works[f - 10, d - 10] = -1.0
+    else:
+        works[f - 10, d - 10] = err#numpy.std(errors)#score
+
+idx = numpy.unravel_index(numpy.argmin(works), works.shape)
+print numpy.array(idx) + 10, works[idx]
+
+plt.imshow(works, interpolation = 'NONE', cmap = plt.cm.viridis)
+plt.colorbar()
 #%%
 fddl = numpy.zeros(len(means))
 for i in range(len(means)):
