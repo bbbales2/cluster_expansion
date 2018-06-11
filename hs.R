@@ -22,7 +22,9 @@ posterior_interval(fit) %>% as.tibble %>%
   mutate(rn = row_number()) %>%
   rename(low = '5%', high = '95%') %>%
   ggplot(aes(rn)) +
-  geom_ribbon(aes(ymin = low, ymax = high))
+  geom_errorbar(aes(ymin = low, ymax = high)) +
+  ylab("Parameter values") +
+  xlab("Parameter number (0 is intercept)")
 
 # fit2 = brm(paste(names(df)[-190], collapse = " + ") %>% paste0("y ~ ", .),
 #            data = df,
